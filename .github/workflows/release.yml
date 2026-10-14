@@ -4,6 +4,9 @@ on:
   push:
     tags: ['v*']
 
+permissions:
+  contents: write # lets GITHUB_TOKEN create the release and upload installers
+
 jobs:
   build:
     strategy:
