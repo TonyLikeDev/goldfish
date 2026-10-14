@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#000">
+<title>Goldfish remote</title>
+<style>
+  * { box-sizing: border-box }
+  html, body { margin: 0; height: 100%; background: #000; color: #fff; font-family: system-ui, -apple-system, sans-serif; -webkit-tap-highlight-color: transparent }
+  body { display: flex; flex-direction: column; height: 100dvh }
+  #view { position: relative; flex: 1; overflow: hidden; padding: 0 22px; mask-image: linear-gradient(#000 75%, transparent) }
+  #text { position: relative; padding-top: 20px; font-size: 28px; line-height: 1.4; font-weight: 500; white-space: pre-wrap; overflow-wrap: anywhere; transition: transform .3s ease }
+  .read { color: rgb(255 255 255 / .38) }
+  .cur { color: #ffd60a }
+  #msg { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; background: #000; color: #8e8e93; font-size: 17px; text-align: center }
+  #msg[hidden] { display: none }
+  #progress { width: 0; height: 3px; background: #ffd60a; transition: width .3s }
+  nav { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); background: #111 }
+  button { display: grid; place-items: center; height: 56px; border: 0; border-radius: 14px; background: #2c2c2e; color: #fff }
+  button:active { background: #48484a }
+  button svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round }
+  #toggle { background: #ffd60a; color: #000 }
+  #toggle.paused { background: #ff9f0a }
+  #toggle .play, #toggle.paused .pause { display: none }
+  #toggle.paused .play { display: block }
+</style>
+</head>
+<body>
+<div id="view"><div id="text"></div><div id="msg">Connecting…</div></div>
+<div id="progress"></div>
+<nav>
+  <button data-do="back" aria-label="Back one line"><svg viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
+  <button data-do="slower" aria-label="Slower"><svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button>
+  <button data-do="toggle" id="toggle" aria-label="Pause or resume">
+    <svg class="pause" viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"/></svg>
+    <svg class="play" viewBox="0 0 24 24"><path d="M7 4.5v15l12-7.5z"/></svg>
+  </button>
+  <button data-do="faster" aria-label="Faster"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+  <button data-do="forward" aria-label="Forward one line"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12l7 7 7-7"/></svg></button>
+</nav>
+<script type="module">
+import { tokenize } from '/script.js'
+
+const token = new URLSearchParams(location.search).get('t')
+const $ = id => document.getElementById(id)
+let spans = [], shown = -1
+
+for (const b of document.querySelectorAll('[data-do]')) {
+  b.onclick = () => fetch(`/cmd?t=${token}&do=${b.dataset.do}`, { method: 'POST' })
+}
+
+function load({ running, text, lang }) {
+  $('msg').hidden = running
+  $('msg').textContent = 'Press Start in Goldfish to begin.'
+  spans = []
+  shown = -1
+  if (!running) return $('text').replaceChildren()
+  const frag = document.createDocumentFragment()
+  for (const p of tokenize(text, lang).parts) {
+    if (p.w < 0) { (spans.at(-1) ?? frag).append(p.text); continue }
+    const s = document.createElement('span')
+    s.textContent = p.text
+    spans.push(s)
+    frag.append(s)
+  }
+  $('text').replaceChildren(frag)
+}
+
+function paint({ pos = 0, playing = true }) {
+  $('toggle').classList.toggle('paused', !playing)
+  if (!spans.length) return
+  const cur = Math.min(pos, spans.length)
+  if (cur !== shown) {
+    const [a, b] = shown < 0 ? [0, spans.length] : [Math.min(cur, shown), Math.min(Math.max(cur, shown) + 1, spans.length)]
+    for (let i = a; i < b; i++) spans[i].className = i < cur ? 'read' : i === cur ? 'cur' : ''
+    shown = cur
+    const el = spans[Math.min(cur, spans.length - 1)]
+    // Keep the current line a little below the top, with one line of context above it.
+    $('text').style.transform = `translateY(${-Math.max(0, el.offsetTop - el.offsetHeight * 1.4)}px)`
+  }
+  $('progress').style.width = `${Math.min(pos / spans.length, 1) * 100}%`
+}
+
+const events = new EventSource(`/events?t=${token}`)
+events.onmessage = e => {
+  const m = JSON.parse(e.data)
+  if (m.type === 'script') load(m)
+  else paint(m)
+}
+events.onerror = () => {
+  $('msg').hidden = false
+  $('msg').textContent = 'Reconnecting to Goldfish…'
+}
+</script>
+</body>
+</html>

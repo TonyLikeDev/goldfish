@@ -1,0 +1,105 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:">
+<title>Goldfish</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <div class="brand">
+    <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M3 16c4.5-7.5 12.5-9.5 19-5l6.5-4.5v19L22 21c-6.5 4.5-14.5 2.5-19-5z" fill="#ff8a3d"/><circle cx="10.5" cy="14.5" r="1.7" fill="#16161a"/></svg>
+    Goldfish
+  </div>
+  <div class="modes" role="radiogroup" aria-label="Mode">
+    <label><input type="radio" name="mode" value="voice"><span>Follow my voice</span></label>
+    <label><input type="radio" name="mode" value="talk"><span>Scroll while I talk</span></label>
+  </div>
+  <div class="actions">
+    <span id="live" hidden></span>
+    <button id="phone" class="icon" title="Phone remote" aria-label="Phone remote">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="6.5" y="2.5" width="11" height="19" rx="2.5"/><path d="M11 18h2"/></svg>
+    </button>
+    <button id="gear" class="icon" title="Settings" aria-label="Settings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h9M19 7h1M4 17h3M13 17h7"/><circle cx="16" cy="7" r="2.5"/><circle cx="10" cy="17" r="2.5"/></svg>
+    </button>
+    <button id="start" class="primary">Start</button>
+  </div>
+</header>
+
+<main>
+  <aside>
+    <div class="aside-head">
+      <h2>Scripts</h2>
+      <button id="new" class="icon small" title="New script" aria-label="New script">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
+    </div>
+    <ul id="list"></ul>
+    <button id="import" class="ghost">Import file…</button>
+  </aside>
+
+  <section id="editor">
+    <div id="banner" hidden></div>
+    <div class="title-row">
+      <input id="title" placeholder="Untitled script" spellcheck="false">
+      <select id="lang" title="Script language"></select>
+    </div>
+    <textarea id="text" placeholder="Paste or type your script here, or drop a .docx, .txt or .md file."></textarea>
+    <footer>
+      <span id="stats"></span>
+      <button id="delete" class="ghost danger">Delete script</button>
+    </footer>
+  </section>
+</main>
+
+<dialog id="settings">
+  <form method="dialog">
+    <h2>Settings</h2>
+
+    <h3>Follow my voice</h3>
+    <label class="row">Speech model <select data-key="model"></select></label>
+    <div id="model-status" class="hint"></div>
+    <label class="check"><input type="checkbox" data-key="gpu"> Use the graphics card (much faster)</label>
+
+    <h3>Microphone</h3>
+    <label class="row">Microphone <select data-key="mic"></select></label>
+    <label class="row">Voice sensitivity <span><input type="range" min="0" max="1" step="0.05" data-key="sensitivity"><output></output></span></label>
+    <label class="row">Speed for “Scroll while I talk” <span><input type="range" min="0.5" max="8" step="0.25" data-key="speed"><output></output></span></label>
+
+    <h3>Bar</h3>
+    <label class="row">Text size <span><input type="range" min="16" max="44" step="1" data-key="fontSize"><output></output></span></label>
+    <label class="row">Width <span><input type="range" min="360" max="1200" step="20" data-key="barWidth"><output></output></span></label>
+    <label class="row">Lines <span><input type="range" min="1" max="8" step="1" data-key="lines"><output></output></span></label>
+    <label class="row">Highlight color <input type="color" data-key="highlight"></label>
+    <label class="row">Screen <select data-key="display"></select></label>
+    <label class="check"><input type="checkbox" data-key="hideFromCapture"> Hide the bar from screen sharing and recordings</label>
+
+    <h3>Shortcuts <small>work in any app while presenting; click a box and press keys</small></h3>
+    <label class="row">Pause / resume <input class="key" data-shortcut="toggle" readonly></label>
+    <label class="row">Back one line <input class="key" data-shortcut="back" readonly></label>
+    <label class="row">Forward one line <input class="key" data-shortcut="forward" readonly></label>
+    <label class="row">Faster <input class="key" data-shortcut="faster" readonly></label>
+    <label class="row">Slower <input class="key" data-shortcut="slower" readonly></label>
+    <label class="row">Hide / show bar <input class="key" data-shortcut="hide" readonly></label>
+
+    <h3>Phone remote</h3>
+    <label class="check"><input type="checkbox" data-key="remote"> Let a phone on this Wi-Fi view and control the bar</label>
+    <label class="row">Port <input type="number" min="1024" max="65535" data-key="remotePort"></label>
+
+    <menu><button class="primary">Done</button></menu>
+  </form>
+</dialog>
+
+<dialog id="remote">
+  <form method="dialog">
+    <h2>Phone remote</h2>
+    <div id="remote-body"></div>
+    <menu><button class="primary">Done</button></menu>
+  </form>
+</dialog>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

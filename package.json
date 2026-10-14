@@ -1,0 +1,77 @@
+{
+  "name": "goldfish",
+  "productName": "Goldfish",
+  "version": "0.1.0",
+  "description": "Open-source teleprompter that follows your voice. Windows & macOS.",
+  "author": "Goldfish contributors",
+  "license": "MIT",
+  "type": "module",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test",
+    "dist": "electron-builder"
+  },
+  "dependencies": {
+    "@fugood/whisper.node": "1.2.0-rc.1",
+    "electron-updater": "6.8.9",
+    "mammoth": "1.13.0",
+    "qrcode": "1.5.4"
+  },
+  "devDependencies": {
+    "electron": "44.7.2",
+    "electron-builder": "26.15.3"
+  },
+  "build": {
+    "appId": "app.goldfish.teleprompter",
+    "files": [
+      "main.js",
+      "whisper.js",
+      "preload.cjs",
+      "src/**/*",
+      "!node_modules/@fugood/node-whisper-*-cuda/**",
+      "!node_modules/@fugood/node-whisper-wasm/**",
+      "!node_modules/@fugood/whisper.node/{src,scripts}/**",
+      "!node_modules/@fugood/whisper.node/CMakeLists.txt"
+    ],
+    "asarUnpack": [
+      "node_modules/@fugood/**"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": false
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
+      "category": "public.app-category.productivity",
+      "identity": "-",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Goldfish listens to your voice to follow along with your script. Audio never leaves your computer."
+      }
+    }
+  }
+}

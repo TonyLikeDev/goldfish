@@ -1,0 +1,37 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'">
+<title>Goldfish bar</title>
+<style>
+  :root { --font: 24px; --hl: #ffd60a; --top: 10px }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: transparent; cursor: default; user-select: none }
+  body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased }
+  #bar { position: absolute; inset: 0; background: #000; color: #fff; border-radius: 0 0 22px 22px; overflow: hidden }
+  #view { position: absolute; top: var(--top); bottom: 12px; left: 24px; right: 24px; overflow: hidden;
+    mask-image: linear-gradient(#000 calc(100% - 1.2em), transparent) }
+  #text { position: relative; font-size: var(--font); line-height: 1.4; font-weight: 500; white-space: pre-wrap;
+    overflow-wrap: anywhere; transition: transform .3s ease }
+  #text .read { color: rgb(255 255 255 / .38) }
+  #text .cur { color: var(--hl) }
+  .paused #text { opacity: .45 }
+  #progress { position: absolute; left: 0; bottom: 0; height: 3px; width: 0; background: var(--hl); opacity: .75; transition: width .3s }
+  #dot { position: absolute; right: 10px; bottom: 7px; width: 6px; height: 6px; border-radius: 50%; background: #3a3a3c; transition: background .15s }
+  #dot.on { background: #34c759 }
+  #dot.paused { background: #ff9f0a }
+  #status { position: absolute; left: 24px; right: 24px; bottom: 4px; font-size: 11px; color: #a1a1a6; text-align: center;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+  #status:not(:empty) ~ #progress { display: none }
+</style>
+</head>
+<body>
+<div id="bar">
+  <div id="view"><div id="text"></div></div>
+  <div id="status"></div>
+  <div id="progress"></div>
+  <div id="dot"></div>
+</div>
+<script type="module" src="bar.js"></script>
+</body>
+</html>
