@@ -76,6 +76,8 @@ Optional, but removes the first-launch warnings (and macOS auto-update needs it)
   `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`, and remove `"identity": "-"` from `package.json`.
 - **Windows**: any code signing certificate via `CSC_LINK` / `CSC_KEY_PASSWORD`, or Azure Trusted Signing.
 
+Then uncomment the matching `env` lines in `.github/workflows/release.yml`.
+
 ## License
 
 MIT

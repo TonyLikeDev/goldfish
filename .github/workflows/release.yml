@@ -10,6 +10,7 @@ permissions:
 jobs:
   build:
     strategy:
+      fail-fast: false # a Mac failure shouldn't cancel the Windows build
       matrix:
         os: [windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
@@ -24,10 +25,11 @@ jobs:
       - run: npx electron-builder --publish always -c.publish=github
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Optional code signing: add these as repository secrets when you have the certificates
+          # Optional code signing: once these repository secrets exist, uncomment the lines
           # (and remove "identity": "-" from package.json for macOS). See README > Code signing.
-          CSC_LINK: ${{ secrets.CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # Keep them commented until then: an empty CSC_LINK makes electron-builder fail.
+          # CSC_LINK: ${{ secrets.CSC_LINK }}
+          # CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          # APPLE_ID: ${{ secrets.APPLE_ID }}
+          # APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          # APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
