@@ -24,6 +24,7 @@
   },
   "build": {
     "appId": "app.goldfish.teleprompter",
+    "publish": "github",
     "files": [
       "main.js",
       "whisper.js",
