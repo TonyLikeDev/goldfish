@@ -7,6 +7,10 @@ on:
 permissions:
   contents: write # lets GITHUB_TOKEN create the release and upload installers
 
+concurrency: # one build per tag: a re-pushed tag waits instead of mixing its files into the same draft
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   build:
     strategy:
@@ -15,11 +19,14 @@ jobs:
         os: [windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
+      # electron-builder publishes to the release of the package.json version, so another tag would upload nothing
+      - name: Check the tag matches package.json
+        run: node -e "const v = 'v' + JSON.parse(require('fs').readFileSync('package.json')).version; if (process.env.GITHUB_REF_NAME !== v) { console.error('::error::Tag ' + process.env.GITHUB_REF_NAME + ' does not match package.json version ' + v); process.exit(1) }"
       - run: npm ci
       - run: npm test
       - run: npx electron-builder --publish always
@@ -27,9 +34,10 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Optional code signing: once these repository secrets exist, uncomment the lines
           # (and remove "identity": "-" from package.json for macOS). See README > Code signing.
-          # Keep them commented until then: an empty CSC_LINK makes electron-builder fail.
-          # CSC_LINK: ${{ secrets.CSC_LINK }}
-          # CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          # Keep them commented until then: an empty CSC_LINK makes the macOS build fail.
+          # Windows signs with WIN_CSC_LINK / WIN_CSC_KEY_PASSWORD (empty means unsigned), macOS with CSC_LINK / CSC_KEY_PASSWORD.
+          # CSC_LINK: ${{ secrets[matrix.os == 'windows-latest' && 'WIN_CSC_LINK' || 'CSC_LINK'] }}
+          # CSC_KEY_PASSWORD: ${{ secrets[matrix.os == 'windows-latest' && 'WIN_CSC_KEY_PASSWORD' || 'CSC_KEY_PASSWORD'] }}
           # APPLE_ID: ${{ secrets.APPLE_ID }}
           # APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           # APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}

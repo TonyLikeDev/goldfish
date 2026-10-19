@@ -1,17 +1,19 @@
 :root {
   color-scheme: light dark;
-  --bg: #f5f5f7; --panel: #fff; --sunken: #ececf0; --line: #dcdce2; --text: #1c1c1e; --muted: #6b6b73;
-  --accent: #ff8a3d; --accent-strong: #f0701f; --accent-ink: #1f1306; --danger: #e5484d; --ok: #2f9e66; --warn: #d97706;
+  --bg: #f5f5f7; --panel: #fff; --sunken: #ececf0; --line: #dcdce2; --text: #1c1c1e; --muted: #66666e;
+  /* --accent-fg, --danger-fg: the accent and red for text, focus rings and markers; they and the status colours reach WCAG AA on the panels */
+  --accent: #ff8a3d; --accent-strong: #f0701f; --accent-ink: #1f1306; --accent-fg: #c2410c; --danger: #c42b30; --danger-fg: #c42b30; --ok: #17784a; --warn: #a85200;
   --hover: rgb(0 0 0 / .05);
 }
 @media (prefers-color-scheme: dark) {
-  :root { --bg: #111114; --panel: #18181c; --sunken: #222228; --line: #2e2e35; --text: #ececf1; --muted: #8e8e98; --hover: rgb(255 255 255 / .06) }
+  :root { --bg: #111114; --panel: #18181c; --sunken: #222228; --line: #2e2e35; --text: #ececf1; --muted: #8e8e98; --hover: rgb(255 255 255 / .06);
+    --accent-fg: #ff8a3d; --danger: #e5484d; --danger-fg: #ff6961; --ok: #2f9e66; --warn: #d97706 }
 }
 
 * { box-sizing: border-box }
 html, body { height: 100% }
 body {
-  margin: 0; display: grid; grid-template-rows: auto 1fr; background: var(--bg); color: var(--text);
+  margin: 0; display: grid; grid-template-rows: auto 1fr; grid-template-columns: minmax(0, 1fr); background: var(--bg); color: var(--text);
   font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; -webkit-font-smoothing: antialiased;
 }
 button, input, select, textarea { font: inherit; color: inherit }
@@ -22,14 +24,14 @@ button.primary:hover { background: var(--accent-strong) }
 button.primary.stop { background: var(--danger); color: #fff }
 button.ghost { border-color: transparent; background: none; color: var(--muted) }
 button.ghost:hover { color: var(--text); background: var(--hover) }
-button.danger:hover { color: var(--danger) }
+button.danger:hover { color: var(--danger-fg) }
 button.icon { display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border-color: transparent; background: none; color: var(--muted) }
 button.icon:hover { color: var(--text); background: var(--hover) }
 button.icon svg { width: 20px; height: 20px }
 button.icon.small { width: 28px; height: 28px }
 button.icon.small svg { width: 16px; height: 16px }
-button.link { border: 0; padding: 0; background: none; color: var(--accent-strong); text-decoration: underline }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+button.link { border: 0; padding: 0; background: none; color: var(--accent-fg); text-decoration: underline }
+:focus-visible { outline: 2px solid var(--accent-fg); outline-offset: 2px }
 select { border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; background: var(--panel) }
 
 /* header */
@@ -40,22 +42,24 @@ header { display: flex; align-items: center; gap: 16px; padding: 10px 16px; bord
 .modes input { position: absolute; opacity: 0; pointer-events: none }
 .modes span { display: block; padding: 5px 14px; border-radius: 7px; color: var(--muted); font-weight: 500; cursor: pointer; white-space: nowrap }
 .modes input:checked + span { background: var(--panel); color: var(--text); box-shadow: 0 1px 3px rgb(0 0 0 / .18) }
-.modes input:focus-visible + span { outline: 2px solid var(--accent) }
-.actions { display: flex; align-items: center; gap: 6px }
-#live { font-size: 12px; color: var(--muted); padding: 4px 10px; margin-right: 4px; border-radius: 99px; background: var(--sunken); white-space: nowrap; font-variant-numeric: tabular-nums }
+.modes input:focus-visible + span { outline: 2px solid var(--accent-fg) }
+.actions { display: flex; align-items: center; gap: 6px; min-width: 0 }
+#live { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 12px; color: var(--muted); padding: 4px 10px; margin-right: 4px; border-radius: 99px; background: var(--sunken); white-space: nowrap; font-variant-numeric: tabular-nums }
 #live::before { content: ''; display: inline-block; width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; background: currentColor; vertical-align: 1px }
 #live.on { color: var(--ok) }
-#live.paused { color: var(--warn) }
+#live.paused, #live.busy { color: var(--warn) }
+#live.error { color: var(--danger-fg) }
 
 /* library */
-main { display: grid; grid-template-columns: 260px 1fr; min-height: 0 }
+main { display: grid; grid-template-columns: 260px minmax(0, 1fr); min-height: 0 }
 aside { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--line); background: var(--panel) }
 .aside-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 10px 6px 18px }
 h2 { margin: 0; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted) }
 #list { list-style: none; margin: 0; padding: 0 8px; overflow-y: auto; flex: 1 }
-#list li { padding: 8px 10px; margin-bottom: 2px; border-radius: 8px; cursor: pointer }
-#list li:hover { background: var(--hover) }
-#list li.active { background: var(--sunken) }
+#list button { display: block; width: 100%; padding: 8px 10px; margin-bottom: 2px; border: 0; background: none; text-align: left }
+#list button:hover { background: var(--hover) }
+#list button:focus-visible { outline-offset: -2px }
+#list button[aria-current=true] { background: var(--sunken); box-shadow: inset 3px 0 var(--accent-fg) }
 #list b { display: block; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
 #list small { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; color: var(--muted); font-size: 12px }
 #import { margin: 8px }
@@ -64,16 +68,20 @@ h2 { margin: 0; font-size: 12px; font-weight: 600; text-transform: uppercase; le
 #editor { display: flex; flex-direction: column; min-height: 0; padding: 20px 32px 12px }
 #banner { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 12px; margin-bottom: 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--sunken) }
 #banner[hidden] { display: none }
-#banner > span { flex: 1; min-width: 200px }
+#banner > span { flex: 1; min-width: 200px; white-space: pre-line }
 #banner.error { border-color: var(--danger) }
 #banner.warn { border-color: var(--warn) }
 #banner.ok { border-color: var(--ok) }
 #banner progress { flex-basis: 100%; height: 6px; accent-color: var(--accent) }
 #banner .close { border: 0; padding: 2px 6px; background: none; color: var(--muted) }
-.title-row { display: flex; align-items: center; gap: 12px }
-#title { flex: 1; min-width: 0; padding: 4px 0; border: 0; outline: none; background: none; font-size: 24px; font-weight: 700; letter-spacing: -.02em }
-#lang { max-width: 280px }
-#text { flex: 1; margin-top: 12px; padding: 0; resize: none; border: 0; outline: none; background: none; font-size: 17px; line-height: 1.65 }
+.title-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px }
+#title { flex: 1 1 200px; min-width: 0; padding: 4px 0; border: 0; background: none; font-size: 24px; font-weight: 700; letter-spacing: -.02em }
+.lang { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); white-space: nowrap }
+#lang { max-width: 280px; font-size: 14px; color: var(--text) }
+#text { flex: 1; margin-top: 12px; padding: 0; resize: none; border: 0; background: none; font-size: 17px; line-height: 1.65 }
+/* focus shows as a bar left of the text, which stays where it was */
+#title, #text { margin-left: -14px; padding-left: 12px; border-left: 2px solid transparent }
+#title:focus-visible, #text:focus-visible { outline: none; border-left-color: var(--accent-fg) }
 #editor footer { display: flex; align-items: center; justify-content: space-between; padding-top: 10px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px }
 
 /* dialogs */
@@ -90,7 +98,8 @@ dialog h3 small { font-weight: 400 }
 .row output { width: 86px; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums }
 .check { display: flex; align-items: center; gap: 8px; padding: 5px 0 }
 .check input { width: 16px; height: 16px; accent-color: var(--accent) }
-input.key, input[type=number] { padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--sunken); text-align: center; outline: none }
+.check + .hint { margin: -4px 0 4px 24px }
+input.key, input[type=number] { padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--sunken); text-align: center }
 input.key:focus { border-color: var(--accent) }
 input[type=number] { width: 100px }
 input[type=color] { width: 44px; height: 28px; padding: 2px; border: 1px solid var(--line); border-radius: 6px; background: none }
@@ -100,4 +109,4 @@ menu { display: flex; justify-content: flex-end; margin: 20px 0 0; padding: 0 }
 #remote-body p { margin: 8px 0 }
 .qr { display: block; width: 220px; height: 220px; margin: 10px auto; padding: 8px; border-radius: 12px; background: #fff }
 .url { font: 12px ui-monospace, Consolas, monospace; word-break: break-all; color: var(--muted) }
-.error { color: var(--danger) }
+.error { color: var(--danger-fg) }

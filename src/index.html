@@ -41,12 +41,12 @@
   </aside>
 
   <section id="editor">
-    <div id="banner" hidden></div>
+    <div id="banner" role="status" aria-live="polite" hidden></div>
     <div class="title-row">
-      <input id="title" placeholder="Untitled script" spellcheck="false">
-      <select id="lang" title="Script language"></select>
+      <input id="title" placeholder="Untitled script" spellcheck="false" aria-label="Script title">
+      <label class="lang">Speech language <select id="lang"></select></label>
     </div>
-    <textarea id="text" placeholder="Paste or type your script here, or drop a .docx, .txt or .md file."></textarea>
+    <textarea id="text" placeholder="Paste or type your script here, or drop a .docx, .txt or .md file." aria-label="Script text"></textarea>
     <footer>
       <span id="stats"></span>
       <button id="delete" class="ghost danger">Delete script</button>
@@ -74,7 +74,8 @@
     <label class="row">Lines <span><input type="range" min="1" max="8" step="1" data-key="lines"><output></output></span></label>
     <label class="row">Highlight color <input type="color" data-key="highlight"></label>
     <label class="row">Screen <select data-key="display"></select></label>
-    <label class="check"><input type="checkbox" data-key="hideFromCapture"> Hide the bar from screen sharing and recordings</label>
+    <label class="check"><input type="checkbox" data-key="hideFromCapture"> Hide Goldfish from screen sharing and recordings</label>
+    <div id="capture-hint" class="hint" hidden>On macOS 15 and later, some recording apps can still capture it. Share a single window to be safe.</div>
 
     <h3>Shortcuts <small>work in any app while presenting; click a box and press keys</small></h3>
     <label class="row">Pause / resume <input class="key" data-shortcut="toggle" readonly></label>
@@ -86,7 +87,7 @@
 
     <h3>Phone remote</h3>
     <label class="check"><input type="checkbox" data-key="remote"> Let a phone on this Wi-Fi view and control the bar</label>
-    <label class="row">Port <input type="number" min="1024" max="65535" data-key="remotePort"></label>
+    <label class="row">Port <input type="number" min="1024" max="65535" data-key="remotePort" aria-label="Phone remote port"></label>
 
     <menu><button class="primary">Done</button></menu>
   </form>

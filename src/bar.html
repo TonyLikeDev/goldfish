@@ -10,7 +10,8 @@
   body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased }
   #bar { position: absolute; inset: 0; background: #000; color: #fff; border-radius: 0 0 22px 22px; overflow: hidden }
   #view { position: absolute; top: var(--top); bottom: 12px; left: 24px; right: 24px; overflow: hidden;
-    mask-image: linear-gradient(#000 calc(100% - 1.2em), transparent) }
+    mask-image: linear-gradient(#000 calc(100% - var(--font) * .6), transparent) }
+  .one-line #view { mask-image: none }
   #text { position: relative; font-size: var(--font); line-height: 1.4; font-weight: 500; white-space: pre-wrap;
     overflow-wrap: anywhere; transition: transform .3s ease }
   #text .read { color: rgb(255 255 255 / .38) }
@@ -20,8 +21,9 @@
   #dot { position: absolute; right: 10px; bottom: 7px; width: 6px; height: 6px; border-radius: 50%; background: #3a3a3c; transition: background .15s }
   #dot.on { background: #34c759 }
   #dot.paused { background: #ff9f0a }
-  #status { position: absolute; left: 24px; right: 24px; bottom: 4px; font-size: 11px; color: #a1a1a6; text-align: center;
+  #status { position: absolute; left: 24px; right: 24px; bottom: 3px; font-size: 12.5px; color: #d1d1d6; text-align: center;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+  #status.error { color: #ff6961 }
   #status:not(:empty) ~ #progress { display: none }
 </style>
 </head>

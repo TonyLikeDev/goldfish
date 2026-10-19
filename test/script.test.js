@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { normalize, tokenize, locate, mdToText, guessLang } from '../src/script.js'
+import { normalize, tokenize, locate, guessLang } from '../src/script.js'
 
 const EN = `Good morning everyone, and thank you for joining us today. Over the last quarter our team focused on three things: making onboarding faster, cutting infrastructure costs, and shipping the new mobile app. I want to walk you through each of these, share what worked, what did not, and what we are planning for the next three months. Let us start with onboarding, because it had the biggest impact on revenue. Two years ago a new customer needed eleven days to go live. Today it takes four.`
 const VI = `Xin chào tất cả mọi người, cảm ơn các bạn đã tham gia buổi họp hôm nay. Trong quý vừa qua, nhóm chúng tôi tập trung vào ba việc chính: rút ngắn thời gian onboarding, giảm chi phí hạ tầng và ra mắt ứng dụng di động mới.`
@@ -74,12 +74,41 @@ test('guessLang reads the writing system', () => {
   assert.equal(guessLang('今日はいい天気ですね。会議を始めましょう。', 'en'), 'ja')
   assert.equal(guessLang('안녕하세요 여러분, 오늘 회의를 시작하겠습니다.', 'en'), 'ko')
   assert.equal(guessLang('สวัสดีครับ ยินดีต้อนรับทุกคน', 'en'), 'th')
-  assert.equal(guessLang(EN, 'id'), 'id')
   assert.equal(guessLang(`${EN} Thanks to Nguyễn Văn An and 李明.`, 'en'), 'en')
+  assert.equal(guessLang(VI.normalize('NFD'), 'en'), 'vi') // tone marks typed as separate characters
   assert.equal(guessLang('', 'fr'), 'fr')
 })
 
-test('mdToText strips markdown syntax', () => {
-  const md = '# Title\n\nSome **bold** and _italic_ text with [a link](http://x.y) and `code`.\n\n- item one\n- item two\n\n```js\nskip()\n```\nsnake_case_word stays'
-  assert.equal(mdToText(md), 'Title\n\nSome bold and italic text with a link and code.\n\nitem one\nitem two\n\nsnake_case_word stays')
+test('guessLang tells common Latin-script languages apart', () => {
+  const texts = {
+    es: 'Hola a todos y bienvenidos de nuevo al canal. Hoy os voy a enseñar cómo edito mis vídeos en menos de una hora, desde el primer montaje hasta la exportación final.',
+    fr: "Bonjour à tous et merci d'être là aujourd'hui. Je vais vous montrer comment je monte mes vidéos en moins d'une heure, et ce qui a marché pour nous cette année.",
+    de: 'Guten Morgen zusammen und vielen Dank, dass Sie heute dabei sind. Im letzten Quartal hat sich unser Team auf drei Dinge konzentriert.',
+    pt: 'Fala, pessoal, tudo bem? Sejam bem-vindos de volta ao canal. Hoje eu vou mostrar como eu edito os meus vídeos em menos de uma hora.',
+    it: 'Buongiorno a tutti e grazie per essere qui oggi. Nell’ultimo trimestre il nostro team si è concentrato su tre cose che sono molto importanti.',
+    nl: 'Goedemorgen allemaal en bedankt dat jullie er vandaag bij zijn. Ik wil jullie laten zien wat goed ging en wat niet.',
+    id: 'Selamat pagi semuanya dan terima kasih sudah hadir hari ini. Saya ingin menjelaskan apa yang berhasil dan apa yang tidak.',
+  }
+  for (const [lang, text] of Object.entries(texts)) assert.equal(guessLang(text, 'en'), lang)
+  assert.equal(guessLang(EN, 'id'), 'en')
+  assert.equal(guessLang(EN, 'auto'), 'en')
+  assert.equal(guessLang('Hello and welcome', 'fr'), 'fr') // too short to tell
+  assert.equal(guessLang('Hello and welcome', 'auto'), 'auto')
+  assert.equal(guessLang(texts.es, 'ca'), 'ca') // Catalan reads much like Spanish: keep the user's pick
+})
+
+test('guessLang keeps your language when it is written the same way', () => {
+  const UK = 'Доброго ранку всім і дякую, що ви сьогодні з нами. Минулого кварталу наша команда зосередилася на трьох речах.'
+  const FA = 'صبح همگی بخیر و از اینکه امروز اینجا هستید متشکرم. در فصل گذشته تیم ما روی سه چیز تمرکز کرد.'
+  const MR = 'सर्वांना सुप्रभात आणि आज इथे आल्याबद्दल धन्यवाद. मागच्या तिमाहीत आमच्या टीमने तीन गोष्टींवर लक्ष केंद्रित केले.'
+  const YUE = '大家早晨，多謝各位今日嚟到。上個季度，我哋團隊主要專注喺三件事。'
+  assert.equal(guessLang(UK, 'uk'), 'uk')
+  assert.equal(guessLang(FA, 'fa'), 'fa')
+  assert.equal(guessLang(MR, 'mr'), 'mr')
+  assert.equal(guessLang(YUE, 'yue'), 'yue')
+  assert.equal(guessLang(UK, 'en'), 'ru') // another writing system: the guess wins
+  assert.equal(guessLang(UK, 'auto'), 'ru')
+  assert.equal(guessLang(ZH, 'ja'), 'zh')
+  assert.equal(guessLang(VI, 'ca'), 'vi') // tone marks are certain
+  assert.equal(guessLang(UK, 'xx'), 'ru')
 })

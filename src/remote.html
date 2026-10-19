@@ -53,6 +53,7 @@ for (const b of document.querySelectorAll('[data-do]')) {
 function load({ running, text, lang }) {
   $('msg').hidden = running
   $('msg').textContent = 'Press Start in Goldfish to begin.'
+  document.documentElement.lang = lang && lang !== 'auto' ? lang : 'en' // right font for kanji
   spans = []
   shown = -1
   if (!running) return $('text').replaceChildren()
@@ -90,7 +91,9 @@ events.onmessage = e => {
 }
 events.onerror = () => {
   $('msg').hidden = false
-  $('msg').textContent = 'Reconnecting to Goldfish…'
+  // Closed means refused, not unreachable: the link holds a token that changes at every launch.
+  $('msg').textContent = events.readyState === EventSource.CLOSED
+    ? 'Goldfish restarted or this link expired. Scan the QR code in Goldfish again.' : 'Reconnecting to Goldfish…'
 }
 </script>
 </body>

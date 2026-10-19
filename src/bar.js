@@ -1,12 +1,18 @@
-import { tokenize, locate } from './script.js'
+import { tokenize, locate, normalize } from './script.js'
 
 const api = window.goldfish
 const $ = id => document.getElementById(id)
 const sleep = ms => new Promise(r => setTimeout(r, ms))
 const RATE = 16000, RING = RATE * 8, WINDOW = RATE * 6 // mic buffer, and the audio Whisper hears each time
 
-let { script, settings, top, testAudio } = await api.invoke('bar:init')
-let idx, spans = [], wordPart = [], pos = 0, playing = true, shown = -1, status = ''
+let { script, settings, top, testAudio, pos = 0 } = await api.invoke('bar:init') // pos: where a restarted bar resumes
+let idx, spans = [], wordPart = [], playing = true, shown = -1
+
+// Status line, also shown in the main window. Speech engine news only matters in voice mode,
+// a broken microphone in every mode.
+const OK = { status: '', statusKind: '' } // statusKind: '' | 'busy' | 'error'
+let engineNote = OK, micNote = null
+const note = () => micNote ?? (settings.mode === 'voice' ? engineNote : OK)
 
 // ---------- display ----------
 
@@ -15,10 +21,12 @@ function applyStyle() {
   s.setProperty('--font', `${settings.fontSize}px`)
   s.setProperty('--hl', settings.highlight)
   s.setProperty('--top', `${top}px`)
+  document.body.classList.toggle('one-line', settings.lines === 1) // no "more below" fade over the only line
   shown = -1
 }
 
 function render() {
+  if (script.lang && script.lang !== 'auto') document.documentElement.lang = script.lang // right font for kanji
   idx = tokenize(script.text, script.lang)
   const frag = document.createDocumentFragment()
   idx.parts.forEach((p, i) => {
@@ -45,12 +53,14 @@ function paint() {
   }
   const dot = !playing ? 'paused' : speaking() ? 'on' : ''
   const width = `${spans.length ? (Math.min(pos / spans.length, 1) * 100).toFixed(1) : 0}%`
-  const next = `${dot}|${width}|${status}`
+  const { status, statusKind } = note()
+  const next = `${dot}|${width}|${statusKind}|${status}`
   if (next === painted) return
   painted = next
   $('dot').className = dot
   $('progress').style.width = width
   $('status').textContent = status
+  $('status').className = statusKind
   document.body.classList.toggle('paused', !playing)
 }
 
@@ -65,19 +75,20 @@ function lineStart(dir) {
     return i
   }
   while (i > 0 && y(i - 1) >= lineY) i--
-  if (i === 0) return 0
+  if (i === 0 || pos >= spans.length) return i // from the end, back re-reads the last line
   const prevY = y(i - 1)
   while (i > 0 && y(i - 1) >= prevY) i--
   return i
 }
 
-const history = [[0, 0]] // [sample, word] at every move, so prompts can end before the audio window
+const history = [[0, pos]] // [sample, word] at every move, so prompts can end before the audio window
 function moveTo(p) {
   pos = Math.max(0, Math.min(p, spans.length))
   history.push([total, Math.floor(pos)])
   if (history.length > 500) history.shift()
 }
 
+<<<<<<< Updated upstream
 // A move by hand: audio heard so far was read at the old place, so listen() stops sending it.
 function jumpTo(p) {
   heardFrom = total
@@ -87,6 +98,20 @@ function jumpTo(p) {
 api.on('cmd', name => {
   if (name === 'toggle') playing = !playing
   else if (name === 'back' || name === 'forward') jumpTo(lineStart(name === 'back' ? -1 : 1))
+=======
+// Moves by hand (wheel, shortcuts, phone). Audio from before the move, and transcripts still
+// on their way, are about the old place: voice follow ignores them.
+let heardFrom = 0, jumps = 0
+function jump(p) {
+  moveTo(p)
+  heardFrom = total
+  jumps++
+}
+
+api.on('cmd', name => {
+  if (name === 'toggle') { playing = !playing; if (playing) heardFrom = total } // not what was said while paused
+  else if (name === 'back' || name === 'forward') jump(lineStart(name === 'back' ? -1 : 1))
+>>>>>>> Stashed changes
   else if (name === 'faster' || name === 'slower') {
     settings.speed = Math.min(8, Math.max(0.5, settings.speed + (name === 'faster' ? 0.25 : -0.25)))
     api.invoke('settings:set', { speed: settings.speed })
@@ -98,7 +123,11 @@ let wheel = 0
 addEventListener('wheel', e => {
   wheel += e.deltaY
   if (Math.abs(wheel) < 50) return
+<<<<<<< Updated upstream
   jumpTo(lineStart(Math.sign(wheel)))
+=======
+  jump(lineStart(Math.sign(wheel)))
+>>>>>>> Stashed changes
   wheel = 0
 }, { passive: true })
 
@@ -143,39 +172,62 @@ async function startAudio() {
 
 // ---------- follow my voice: transcribe the last few seconds, find them in the script ----------
 
+// Script text read before `sample`. None until voice follow has placed the speaker after a move by hand
+// or a resume: what they said before is unknown then, and a wrong prompt makes Whisper loop or make things up.
 function promptBefore(sample) {
-  let p = 0
-  for (const [s, w] of history) if (s <= sample) p = w
-  return p ? idx.parts.slice(wordPart[Math.max(0, p - 30)], wordPart[p - 1] + 1).map(x => x.text).join('') : ''
+  let p = 0, at = 0
+  for (const [s, w] of history) if (s <= sample) [at, p] = [s, w]
+  return p && at > heardFrom ? idx.parts.slice(wordPart[Math.max(0, p - 30)], wordPart[p - 1] + 1).map(x => x.text).join('') : ''
 }
 
-const cleanError = e => e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '')
+function engineError(e) {
+  const status = e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '')
+  engineNote = { status, statusKind: status === 'Switching speech model…' ? 'busy' : 'error' }
+}
 
 async function listen() {
-  if (settings.mode === 'voice') {
-    status = 'Preparing speech engine…'
-    await api.invoke('engine:ready').then(() => { status = '' }, e => { status = cleanError(e) })
-  }
-  let lastSent = 0
+  let lastSent = 0, ready = false
   for (;;) {
     await sleep(100)
+<<<<<<< Updated upstream
     if (settings.mode !== 'voice' || !playing || pos >= spans.length) continue
     if (total - lastVoice > RATE || total - lastSent < RATE / 4) continue // only while talking, only with new audio
     const start = Math.max(total - WINDOW, heardFrom), n = total - start
     if (n < RATE) continue // too short to hold the few words locate() needs, e.g. just after a move
+=======
+    if (settings.mode !== 'voice') { ready = false; continue }
+    if (!ready) {
+      ready = true
+      engineNote = { status: 'Loading the speech model… (the first time takes a while)', statusKind: 'busy' }
+      await api.invoke('engine:ready').then(() => { engineNote = OK }, engineError)
+    }
+    if (!playing || pos >= spans.length) continue
+    // Only while talking, only with new audio, and with half a second of it after a move by hand.
+    if (total - lastVoice > RATE || total - lastSent < RATE / 4 || total - heardFrom < RATE / 2) continue
+    const start = Math.max(total - WINDOW, heardFrom), n = total - start
+>>>>>>> Stashed changes
     const pcm = new Int16Array(n)
     for (let i = 0; i < n; i++) pcm[i] = Math.max(-1, Math.min(1, ring[(start + i) % RING])) * 32767
     lastSent = total
+    const sentAt = jumps
     try {
       // The prompt is script text read before this audio window: it helps spelling and language
       // without making Whisper skip words it thinks it already heard.
       const text = await api.invoke('transcribe', pcm.buffer, { language: script.lang, prompt: promptBefore(start) })
+<<<<<<< Updated upstream
       const next = locate(idx, text, Math.floor(pos))
       // heardFrom > start: moved by hand while this was transcribing, so the result is stale.
       if (next > 0 && heardFrom <= start && settings.mode === 'voice' && playing) moveTo(next)
       status = ''
+=======
+      // More text than the audio could hold (fast speech is ~20 letters/s) is made up: ignore it.
+      const next = normalize(text).length > 25 * n / RATE + 10 ? -1 : locate(idx, text, Math.floor(pos))
+      // A move by hand while this was on its way: it heard the old place.
+      if (next > 0 && sentAt === jumps && settings.mode === 'voice' && playing) moveTo(next)
+      engineNote = OK
+>>>>>>> Stashed changes
     } catch (e) {
-      status = cleanError(e)
+      engineError(e)
       await sleep(2000)
     }
   }
@@ -192,9 +244,9 @@ function frame(now) {
   requestAnimationFrame(frame)
 }
 
-setInterval(() => api.send('bar:state', { pos: Math.floor(pos), total: spans.length, playing, speaking: speaking() }), 200)
+setInterval(() => api.send('bar:state', { pos: Math.floor(pos), total: spans.length, playing, speaking: speaking(), ...note() }), 200)
 applyStyle()
 render()
 requestAnimationFrame(frame)
-startAudio().catch(e => { status = `Microphone unavailable: ${e.message}` })
+startAudio().catch(e => { micNote = { status: `Microphone unavailable: ${e.message}`, statusKind: 'error' } })
 listen()

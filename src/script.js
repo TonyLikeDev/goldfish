@@ -63,34 +63,51 @@ export function locate(idx, heard, pos) {
   return next > pos ? next : -1
 }
 
-// Language guess from the writing system, so pasted or imported scripts get the right speech
-// language. Latin-script languages other than Vietnamese can't be told apart: `fallback`.
+// Language guess, so pasted or imported scripts get the right speech language: the writing system,
+// then Vietnamese tone marks, then the common words of big Latin-script languages.
+// (The phone page loads this file too: keep it to syntax Safari 15 understands, no lookbehind.)
 const SCRIPTS = [
   ['ja', /[぀-ヿ]/g, 0.1], ['ko', /\p{Script=Hangul}/gu, 0.3], ['zh', /\p{Script=Han}/gu, 0.3],
   ['th', /\p{Script=Thai}/gu, 0.3], ['ru', /\p{Script=Cyrillic}/gu, 0.3], ['ar', /\p{Script=Arabic}/gu, 0.3],
   ['he', /\p{Script=Hebrew}/gu, 0.3], ['el', /\p{Script=Greek}/gu, 0.3], ['hi', /\p{Script=Devanagari}/gu, 0.3],
   ['vi', /[ơưđạảấầẩẫậắằẳẵặẻẽếềểễệỉịỏốồổỗộớờởỡợủứừửữựỳỵỷỹ]/giu, 0.03],
 ]
-export function guessLang(text, fallback) {
-  const letters = text.match(/\p{L}/gu)?.length
-  if (!letters) return fallback
-  return SCRIPTS.find(([, re, min]) => (text.match(re)?.length ?? 0) / letters > min)?.[0] ?? fallback
+// ponytail: stop-word counts, not a language model. Needs a sentence or two, and close relatives pass for
+// each other (gl as pt, ms as id, af as nl), hence the same-script rule in guessLang. Words shared by
+// several of these languages ("de", "la", "que", "en") are left out on purpose.
+const WORDS = Object.entries({
+  en: 'the and of to that it for you with this are have not be we our will they what can from but your about there would',
+  es: 'el los las y del con pero más muy también hay yo fue cuando nosotros lo una mis hoy voy hasta ya sus esto eso qué cómo donde ahora aquí tiene puede están hemos',
+  fr: 'le les des du et est une qui pour dans pas sur au aux avec je nous vous ne cette ces sont être très aussi ça ont été notre votre comme tout tous plus',
+  de: 'der die und das ist nicht ein eine einen zu mit von sich auf für dem ich wir uns euch ihr auch sie wie dass sind haben hat wird werden aber oder noch im bei nach aus kann schon mehr heute',
+  it: 'di il che è per non sono della ho gli ci questo anche più nel dei delle molto io noi voi loro cosa nella questa perché oggi abbiamo siamo ma tutti sul essere così grazie ancora dove fare',
+  pt: 'o os do da dos é em um uma não com mais ao muito mas também isso você são foi eu vocês hoje aqui nossa nosso pelo pela seu estão então agora já só tudo bem',
+  nl: 'het een van dat niet op zijn met voor ik ook maar wat dit deze naar wordt worden hebben heeft aan nog bij wij ons onze jullie uit zo hij kunnen moet veel heel goed geen mijn waar omdat dus',
+  id: 'yang dan ini itu dengan untuk tidak dari dalam akan pada juga ke karena ada bisa kami kita saya aku kamu sudah adalah bahwa atau mereka anda lebih sangat semua oleh telah seperti jika kalau harus hanya masih belum lagi',
+  tl: 'ang ng sa mga ay ko mo siya hindi ito naman lang kung nga ka ako kayo sila niya nila natin namin tayo ating inyo ninyo dito ba rin lahat ngayon dahil kasi yung',
+  pl: 'się że nie jest w z jak ale co tak od przez już tylko może czy dla są być był była było który które która oraz bardzo też więc tego będzie jestem wam nam nas żeby jeśli jeszcze teraz dzisiaj wszystko mnie nasz',
+  tr: 've bir bu için ile çok ama gibi daha olarak kadar sonra ki şey ben biz siz olan değil yok mı şu nasıl şimdi sizin bizim ise ancak veya artık sadece böyle işte tüm bütün kendi çünkü eğer bana oldu olduğu',
+  sv: 'och att är inte ett jag från också när här vad mycket till för av hade ska bara vara finns än något någon detta dessa då våra',
+}).map(([lang, words]) => [lang, new Set(words.split(' '))])
+const KNOWN = new Set(SCRIPTS.concat(WORDS).map(([lang]) => lang))
+
+// The language whose common words clearly dominate: at least 3 of them, 8% of all words, twice the runner-up.
+function byWords(text) {
+  const words = text.toLowerCase().match(/\p{L}+/gu) || []
+  const [[lang, a], [, b]] = WORDS.map(([l, set]) => [l, words.filter(w => set.has(w)).length]).sort((x, y) => y[1] - x[1])
+  if (a >= 3 && a >= words.length * 0.08 && a >= 2 * b) return lang
 }
 
-// Markdown to plain speakable text. ponytail: regexes, not a parser; tables and nested
-// constructs come through mostly as-is.
-export function mdToText(md) {
-  return md
-    .replace(/```[\s\S]*?```/g, '')
-    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
-    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
-    .replace(/^[ \t]{0,3}(#{1,6}|>|[-*+]|\d+[.)])[ \t]+/gm, '')
-    .replace(/^[ \t]*([-*_][ \t]*){3,}$/gm, '')
-    .replace(/(\*\*|__|~~)(.+?)\1/g, '$2')
-    .replace(/(?<![\w*])\*(?!\s)(.+?)\*/g, '$1')
-    .replace(/(?<!\w)_(.+?)_(?!\w)/g, '$1')
-    .replace(/`([^`]+)`/g, '$1')
-    .replace(/<[^>]+>/g, '')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim()
+// Writing system of a language code, zh and yue counted as one; undefined for 'auto' and unknown codes.
+const script = lang => { try { return new Intl.Locale(lang).maximize().script.replace('Hant', 'Hans') } catch {} }
+
+export function guessLang(text, fallback) {
+  text = text.normalize('NFC')
+  const letters = text.match(/\p{L}/gu)?.length
+  if (!letters) return fallback
+  const guess = SCRIPTS.find(([, re, min]) => (text.match(re)?.length ?? 0) / letters > min)?.[0] ?? byWords(text)
+  if (!guess) return fallback
+  // Your own language wins when the guess can't rule it out: uk is written like ru, ca like es.
+  // Tone marks rule out everything but vi, and a language known here would have been recognized.
+  return guess === 'vi' || KNOWN.has(fallback) || script(guess) !== script(fallback) ? guess : fallback
 }

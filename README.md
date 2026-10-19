@@ -2,11 +2,11 @@
 
 A free, open-source teleprompter for **Windows and macOS** that follows your voice.
 Your script sits in a small bar right under your webcam, highlights each word as you say it,
-and stays hidden from screen sharing and recordings. Inspired by [Textream](https://textream.net) (Mac only).
+and stays hidden from screen sharing and recordings (on macOS 15 and later some apps can still capture it; see below).
 
 - **Follow my voice**: offline speech recognition (whisper.cpp) highlights where you are. Works in ~100 languages, including mixed-in English words.
 - **Scroll while I talk**: scrolls at your speed while you speak and pauses when you stop. No speech model needed.
-- **Bar under the webcam**, always on top (even over fullscreen slides), **invisible to Zoom / Teams / Meet / OBS screen capture**.
+- **Bar under the webcam**, always on top (even over fullscreen slides). On Windows the bar and the Goldfish window are **hidden from screen sharing and recordings**. On macOS 15 and later some screen recorders and meeting apps can still capture them, so for now share a single window (e.g. your slides), not your whole screen.
 - **Script library**: paste text or import `.docx`, `.txt`, `.md`. The language is detected from the text.
 - **Controls**: global shortcuts, mouse/trackpad scroll on the bar, and a **phone remote** (scan a QR code, same Wi-Fi).
 - Private: audio never leaves your computer. No account, no analytics.
@@ -18,6 +18,8 @@ Download the latest installer from [Releases](../../releases): `.exe` for Window
 The builds are not code-signed yet, so the first launch needs one extra step:
 - **Windows**: SmartScreen → *More info* → *Run anyway*.
 - **macOS**: open the app once, then *System Settings → Privacy & Security → Open Anyway*.
+
+For the same reason, on a Mac Goldfish shows a notice when an update is out instead of updating itself.
 
 On first use of *Follow my voice* Goldfish downloads a speech model (574 MB for the best one, once).
 
@@ -35,6 +37,9 @@ On first use of *Follow my voice* Goldfish downloads a speech model (574 MB for 
 
 All shortcuts can be changed in Settings. Use headphones in calls if you use *Scroll while I talk*,
 otherwise other people's voices from your speakers also scroll the bar.
+
+Presenting with Keynote? Turn on *Allow Mission Control, Dashboard and others to use screen* in *Keynote → Settings → Slideshow*
+so the bar stays visible over a full-screen slideshow.
 
 ## Develop
 
@@ -71,10 +76,11 @@ npm version patch && git push --follow-tags
 
 ### Code signing
 
-Optional, but removes the first-launch warnings (and macOS auto-update needs it):
+Optional, but removes the first-launch warnings:
 - **macOS**: Apple Developer Program ($99/year). Add repository secrets `CSC_LINK` (base64 .p12), `CSC_KEY_PASSWORD`,
   `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`, and remove `"identity": "-"` from `package.json`.
-- **Windows**: any code signing certificate via `CSC_LINK` / `CSC_KEY_PASSWORD`, or Azure Trusted Signing.
+  A signed Mac build can also update itself: remove the macOS notice-only branch of `checkUpdates()` in `main.js`.
+- **Windows**: any code signing certificate via `WIN_CSC_LINK` / `WIN_CSC_KEY_PASSWORD`, or Azure Trusted Signing.
 
 Then uncomment the matching `env` lines in `.github/workflows/release.yml`.
 

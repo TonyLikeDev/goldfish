@@ -38,6 +38,13 @@
     "asarUnpack": [
       "node_modules/@fugood/**"
     ],
+    "electronFuses": {
+      "runAsNode": false,
+      "enableNodeOptionsEnvironmentVariable": false,
+      "enableNodeCliInspectArguments": false,
+      "onlyLoadAppFromAsar": true,
+      "resetAdHocDarwinSignature": true
+    },
     "win": {
       "target": [
         {

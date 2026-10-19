@@ -13,10 +13,11 @@ const MODELS = {
 // Every language Whisper understands.
 const LANGS = 'en zh de es ru ko fr ja pt tr pl ca nl ar sv it id hi fi vi he uk el ms cs ro da hu ta no th ur hr bg lt la mi ml cy sk te fa lv bn sr az sl kn et mk br eu is hy ne mn bs kk sq sw gl mr pa si km sn yo so af oc ka be tg sd gu am yi lo uz fo ht ps tk nn mt sa lb my bo tl mg as tt haw ln ha ba jw su yue'.split(' ')
 
-let { settings } = await api.invoke('settings')
+let { settings, notices = [] } = await api.invoke('settings')
+api.on('notice', notice)
 let scripts = await api.invoke('library')
 let models = await api.invoke('models')
-let current = null, running = false, saveTimer = 0
+let current = null, running = false, refreshTimer = 0, stale = null
 
 function button(label, onclick, className = '') {
   return Object.assign(document.createElement('button'), { type: 'button', textContent: label, onclick, className })
@@ -26,8 +27,16 @@ function banner(text, kind = 'info', actions = []) {
   const el = $('#banner')
   el.hidden = !text
   el.className = kind
+  delete el.dataset.model // download() marks a banner that is about one model
   el.replaceChildren(Object.assign(document.createElement('span'), { textContent: text }),
-    ...actions.map(([label, fn]) => button(label, fn)), button('✕', () => banner(''), 'close'))
+    ...actions.map(([label, fn]) => button(label, fn)), Object.assign(button('✕', () => banner(''), 'close'), { ariaLabel: 'Close' }))
+}
+
+// Notices from main: { text, kind, action?: { label, id } }; the action id is the channel to invoke.
+function notice(...list) {
+  const kinds = ['info', 'ok', 'warn', 'error']
+  banner(list.map(n => n.text).join('\n'), kinds[Math.max(...list.map(n => kinds.indexOf(n.kind)))],
+    list.filter(n => n.action).map(({ action }) => [action.label, () => api.invoke(action.id)]))
 }
 
 async function setSetting(patch) {
@@ -53,14 +62,16 @@ $('#lang').append(new Option('Detect automatically', 'auto'),
 // ---------- script library and editor ----------
 
 function renderList() {
+  const focused = $('#list').contains(document.activeElement)
   $('#list').replaceChildren(...scripts.map(s => {
-    const li = document.createElement('li')
-    li.classList.toggle('active', s === current)
-    li.append(Object.assign(document.createElement('b'), { textContent: s.title || 'Untitled script' }),
+    const b = button('', () => select(s)), li = document.createElement('li')
+    if (s === current) b.ariaCurrent = 'true'
+    b.append(Object.assign(document.createElement('b'), { textContent: s.title || 'Untitled script' }),
       Object.assign(document.createElement('small'), { textContent: s.text.trim().slice(0, 80) || 'Empty' }))
-    li.onclick = () => select(s)
+    li.append(b)
     return li
   }))
+  if (focused) $('#list [aria-current]')?.focus() // keep keyboard focus on the list after picking a script
 }
 
 function renderStats() {
@@ -69,6 +80,7 @@ function renderStats() {
 }
 
 function select(s) {
+  refresh()
   current = s
   $('#title').value = s.title
   $('#text').value = s.text
@@ -77,24 +89,41 @@ function select(s) {
   renderStats()
 }
 
-function flush() {
-  clearTimeout(saveTimer)
+// Every edit reaches main at once; the list, stats and language guess catch up a moment later.
+function edited() {
+  api.send('library:save', current)
+  stale = current
+  clearTimeout(refreshTimer)
+  refreshTimer = setTimeout(refresh, 300)
+}
+function refresh() {
+  clearTimeout(refreshTimer)
+  const s = stale
+  if (!s) return
+  stale = null
+  if (s.langPicked === false) { // nobody picked its language yet: keep guessing from the text
+    const lang = guessLang(s.text, settings.lang)
+    if (lang !== s.lang) { s.lang = lang; api.send('library:save', s) }
+  }
+  if (s === current) $('#lang').value = s.lang
   renderList()
   renderStats()
-  return api.invoke('library:save', current)
 }
+addEventListener('pagehide', refresh)
 
 $('#title').oninput = $('#text').oninput = () => {
-  const wasEmpty = !current.text.trim()
+  const legacy = current.langPicked === undefined && !current.text.trim() // empty v0.1.0 script
   current.title = $('#title').value
   current.text = $('#text').value
-  if (wasEmpty && current.text.trim()) $('#lang').value = current.lang = guessLang(current.text, current.lang) // pasted a script
-  clearTimeout(saveTimer)
-  saveTimer = setTimeout(flush, 400)
+  // ponytail: guessed once from its first text, falling back to its own language as v0.1.0 did, so a language picked
+  // by hand survives; text typed in key by key keeps that first guess
+  if (legacy && current.text.trim()) $('#lang').value = current.lang = guessLang(current.text, current.lang)
+  edited()
 }
 $('#lang').onchange = () => {
   current.lang = $('#lang').value
-  flush()
+  current.langPicked = true
+  edited()
   setSetting({ lang: current.lang }) // default for new scripts
 }
 
@@ -103,21 +132,26 @@ function addScript(s) {
   select(s)
 }
 $('#new').onclick = () => {
-  addScript({ id: crypto.randomUUID(), title: '', text: '', lang: settings.lang, updated: Date.now() })
-  flush()
+  addScript({ id: crypto.randomUUID(), title: '', text: '', lang: settings.lang, langPicked: false, updated: Date.now() })
+  api.send('library:save', current)
   $('#title').focus()
 }
 $('#delete').onclick = async () => {
   if (!confirm(`Delete “${current.title || 'Untitled script'}”?`)) return
-  await api.invoke('library:delete', current.id)
-  scripts = scripts.filter(s => s !== current)
+  const s = current
+  stale = null // a pending language guess would save it again
+  await api.invoke('library:delete', s.id)
+  scripts = scripts.filter(x => x !== s)
   scripts.length ? select(scripts[0]) : $('#new').onclick()
 }
 
 async function importFiles(paths) {
   try {
-    const added = await api.invoke('library:import', paths)
-    if (added.length) { scripts.unshift(...added); select(added[0]) }
+    const { added, errors } = await api.invoke('library:import', paths), n = added.length
+    if (n) { scripts.unshift(...added); select(added[0]) }
+    // One line per problem file; main also warns here about files it did import.
+    if (errors.length) banner([n ? `Imported ${n} script${n > 1 ? 's' : ''}.` : 'Nothing was imported.', ...errors.slice(0, 5),
+      ...errors.length > 5 ? [`and ${errors.length - 5} more`] : []].join('\n'), n ? 'warn' : 'error')
   } catch (e) {
     banner(`Couldn't import that file: ${clean(e)}`, 'error')
   }
@@ -127,8 +161,8 @@ addEventListener('dragover', e => { if (e.dataTransfer.types.includes('Files')) 
 addEventListener('drop', e => {
   if (!e.dataTransfer.types.includes('Files')) return
   e.preventDefault()
-  const paths = [...e.dataTransfer.files].map(f => api.pathOf(f)).filter(p => /\.(txt|md|markdown|docx)$/i.test(p))
-  paths.length ? importFiles(paths) : banner('Goldfish can import .docx, .txt and .md files.', 'error')
+  const paths = [...e.dataTransfer.files].map(f => api.pathOf(f)).filter(Boolean) // main checks the file types
+  paths.length ? importFiles(paths) : banner('Goldfish can import .docx, .txt and .md files saved on this computer.', 'error')
 })
 
 // ---------- speech model ----------
@@ -141,25 +175,32 @@ function needModel() {
   ])
 }
 
+// Another model's result never covers a download's progress, or an error about the model Start needs.
 async function download(name) {
-  const [label, size] = MODELS[name]
+  const [label, size] = MODELS[name], el = $('#banner')
   banner(`Downloading the ${label} speech model (${size} MB)…`)
-  $('#banner').append(document.createElement('progress'))
+  el.append(document.createElement('progress'))
+  el.dataset.model = name
+  const mine = () => (el.dataset.model ?? name) === name
   try {
     await api.invoke('model:download', name)
     models = await api.invoke('models')
-    banner('Speech model ready. Press Start and begin reading.', 'ok')
+    // Only the model Start uses is "ready".
+    if (mine()) banner(name === settings.model ? 'Speech model ready. Press Start and begin reading.' : `The ${label} speech model is downloaded.`, 'ok')
   } catch (e) {
-    banner(`Download failed: ${clean(e)}`, 'error', [['Try again', () => download(name)]])
+    if (mine() || name === settings.model) {
+      banner(`Couldn't download the ${label} speech model: ${clean(e)}`, 'error', [['Try again', () => download(name)]])
+      if (name === settings.model) el.dataset.model = name
+    }
   }
-  renderModel()
+  if (name === settings.model) renderModel() // the status line shows only that model
 }
 
-api.on('model:progress', ({ got, total }) => {
+api.on('model:progress', ({ name, got, total }) => {
   if (!total) return
   const p = $('#banner progress')
-  if (p) Object.assign(p, { max: total, value: got })
-  $('#model-status').textContent = `Downloading… ${Math.round(got / total * 100)}%`
+  if (p && $('#banner').dataset.model === name) Object.assign(p, { max: total, value: got })
+  if (name === settings.model) $('#model-status').textContent = `Downloading… ${Math.round(got / total * 100)}%`
 })
 
 function renderModel() {
@@ -178,7 +219,7 @@ for (const r of document.querySelectorAll('input[name=mode]')) r.onchange = () =
 
 $('#start').onclick = async () => {
   if (running) return api.invoke('session:stop')
-  await flush() // the bar reads the saved script
+  refresh() // a language guess still waiting must reach main before the session reads the script
   const r = await api.invoke('session:start', current.id)
   if (r.error === 'model-missing') needModel()
   else if (r.error) banner(r.error, 'error')
@@ -193,8 +234,9 @@ api.on('session', s => {
   $('#live').hidden = !running
   if (!running) return
   const pct = s.total ? Math.round(s.pos / s.total * 100) : 0
-  $('#live').textContent = `${!s.playing ? 'Paused' : s.speaking ? 'Hearing you' : 'Listening'} · ${pct}%`
-  $('#live').className = !s.playing ? 'paused' : s.speaking ? 'on' : ''
+  $('#live').textContent = s.status || `${!s.playing ? 'Paused' : s.speaking ? 'Hearing you' : 'Listening'} · ${pct}%`
+  $('#live').className = s.status ? s.statusKind : !s.playing ? 'paused' : s.speaking ? 'on' : ''
+  $('#live').title = s.status || '' // long errors are cut short in the pill
 })
 
 // ---------- settings dialog ----------
@@ -220,14 +262,23 @@ async function openSettings() {
   $('#settings').showModal()
 
   const displays = await api.invoke('displays')
-  $('[data-key=display]').replaceChildren(new Option('Main screen', 0), ...displays.map(d => new Option(d.label, d.id)))
-  $('[data-key=display]').value = settings.display
-  // Microphone names are only listed after mic access has been granted once.
-  await navigator.mediaDevices.getUserMedia({ audio: true }).then(s => s.getTracks().forEach(t => t.stop()), () => {})
-  const mics = (await navigator.mediaDevices.enumerateDevices())
-    .filter(d => d.kind === 'audioinput' && d.deviceId !== 'default' && d.deviceId !== 'communications')
-  $('[data-key=mic]').replaceChildren(new Option('System default', ''), ...mics.map(d => new Option(d.label || 'Microphone', d.deviceId)))
-  $('[data-key=mic]').value = settings.mic
+  fill('display', [new Option('Main screen', 0), ...displays.map(d => new Option(d.label, d.id))], 'Saved screen (not connected)')
+  // Microphone names are only listed after mic access has been granted once, so open the mic only then.
+  let devices = await navigator.mediaDevices.enumerateDevices()
+  if (devices.some(d => d.kind === 'audioinput' && !d.label)) {
+    await navigator.mediaDevices.getUserMedia({ audio: true }).then(s => s.getTracks().forEach(t => t.stop()), () => {})
+    devices = await navigator.mediaDevices.enumerateDevices()
+  }
+  const mics = devices.filter(d => d.kind === 'audioinput' && d.deviceId !== 'default' && d.deviceId !== 'communications')
+  fill('mic', [new Option('System default', ''), ...mics.map(d => new Option(d.label || 'Microphone', d.deviceId))], 'Saved microphone (not connected)')
+}
+
+// A saved choice that isn't plugged in stays listed, so the box isn't blank.
+function fill(key, options, missing) {
+  const el = $(`[data-key=${key}]`), value = String(settings[key])
+  if (!options.some(o => o.value === value)) options.push(new Option(missing, value))
+  el.replaceChildren(...options)
+  el.value = value
 }
 
 for (const el of document.querySelectorAll('[data-key]')) {
@@ -235,7 +286,7 @@ for (const el of document.querySelectorAll('[data-key]')) {
     const key = el.dataset.key
     let value = el.type === 'checkbox' ? el.checked : el.value
     if (el.type === 'range' || key === 'display') value = Number(value)
-    if (key === 'remotePort') value = Math.min(65535, Math.max(1024, Number(value) || 7373))
+    if (key === 'remotePort') el.value = value = Math.min(65535, Math.max(1024, Math.round(value) || 7373))
     showOutput(el)
     setSetting({ [key]: value }).then(() => key === 'model' && renderModel())
   })
@@ -266,16 +317,18 @@ for (const el of document.querySelectorAll('[data-shortcut]')) {
 
 async function openRemote() {
   const r = await api.invoke('remote'), body = $('#remote-body')
+  const p = (textContent, className = '') => Object.assign(document.createElement('p'), { textContent, className })
   if (!r.enabled) {
-    body.innerHTML = '<p>See your script on your phone, and pause, go back or skip ahead from anywhere in the room.</p>'
-    body.append(button('Turn on phone remote', async () => { await setSetting({ remote: true }); openRemote() }, 'primary'))
+    body.replaceChildren(p('See your script on your phone, and pause, go back or skip ahead from anywhere in the room.'),
+      button('Turn on phone remote', async () => { await setSetting({ remote: true }); openRemote() }, 'primary'))
   } else if (r.error) {
-    body.replaceChildren(Object.assign(document.createElement('p'), { className: 'error', textContent: r.error }))
+    body.replaceChildren(p(r.error, 'error'))
   } else {
-    body.innerHTML = `<img class="qr" src="${r.qr}" alt="QR code">
-      <p>Scan with your phone's camera. It has to be on the same Wi-Fi as this computer.</p>
-      <p class="url">${r.url}</p>
-      <p class="hint">Page not loading? Allow Goldfish through your firewall when your computer asks.</p>`
+    body.replaceChildren(Object.assign(document.createElement('img'), { className: 'qr', src: r.qr, alt: 'QR code' }),
+      p("Scan with your phone's camera. It has to be on the same Wi-Fi as this computer."),
+      p(r.url, 'url'),
+      ...r.others?.length ? [p(`Not loading? Try: ${r.others.join(', ')}`, 'url')] : [],
+      p('Page not loading? Allow Goldfish through your firewall when your computer asks.', 'hint'))
   }
   if (!$('#remote').open) $('#remote').showModal()
 }
@@ -284,7 +337,9 @@ async function openRemote() {
 
 $('#gear').onclick = openSettings
 $('#phone').onclick = openRemote
+$('#capture-hint').hidden = !isMac
 $(`input[name=mode][value=${settings.mode}]`).checked = true
 if (scripts.length) select(scripts[0])
 else $('#new').onclick()
 if (settings.mode === 'voice' && !models[settings.model]) needModel()
+if (notices.length) notice(...notices)
