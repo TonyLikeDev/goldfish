@@ -88,17 +88,6 @@ function moveTo(p) {
   if (history.length > 500) history.shift()
 }
 
-<<<<<<< Updated upstream
-// A move by hand: audio heard so far was read at the old place, so listen() stops sending it.
-function jumpTo(p) {
-  heardFrom = total
-  moveTo(p)
-}
-
-api.on('cmd', name => {
-  if (name === 'toggle') playing = !playing
-  else if (name === 'back' || name === 'forward') jumpTo(lineStart(name === 'back' ? -1 : 1))
-=======
 // Moves by hand (wheel, shortcuts, phone). Audio from before the move, and transcripts still
 // on their way, are about the old place: voice follow ignores them.
 let heardFrom = 0, jumps = 0
@@ -111,7 +100,6 @@ function jump(p) {
 api.on('cmd', name => {
   if (name === 'toggle') { playing = !playing; if (playing) heardFrom = total } // not what was said while paused
   else if (name === 'back' || name === 'forward') jump(lineStart(name === 'back' ? -1 : 1))
->>>>>>> Stashed changes
   else if (name === 'faster' || name === 'slower') {
     settings.speed = Math.min(8, Math.max(0.5, settings.speed + (name === 'faster' ? 0.25 : -0.25)))
     api.invoke('settings:set', { speed: settings.speed })
@@ -123,18 +111,14 @@ let wheel = 0
 addEventListener('wheel', e => {
   wheel += e.deltaY
   if (Math.abs(wheel) < 50) return
-<<<<<<< Updated upstream
-  jumpTo(lineStart(Math.sign(wheel)))
-=======
   jump(lineStart(Math.sign(wheel)))
->>>>>>> Stashed changes
   wheel = 0
 }, { passive: true })
 
 // ---------- microphone and voice activity ----------
 
 const ring = new Float32Array(RING)
-let total = 0, floor = 0.003, lastVoice = -Infinity, heardFrom = 0
+let total = 0, floor = 0.003, lastVoice = -Infinity
 const speaking = () => total - lastVoice < RATE * 0.4
 
 function onChunk(c) {
@@ -189,12 +173,6 @@ async function listen() {
   let lastSent = 0, ready = false
   for (;;) {
     await sleep(100)
-<<<<<<< Updated upstream
-    if (settings.mode !== 'voice' || !playing || pos >= spans.length) continue
-    if (total - lastVoice > RATE || total - lastSent < RATE / 4) continue // only while talking, only with new audio
-    const start = Math.max(total - WINDOW, heardFrom), n = total - start
-    if (n < RATE) continue // too short to hold the few words locate() needs, e.g. just after a move
-=======
     if (settings.mode !== 'voice') { ready = false; continue }
     if (!ready) {
       ready = true
@@ -205,7 +183,6 @@ async function listen() {
     // Only while talking, only with new audio, and with half a second of it after a move by hand.
     if (total - lastVoice > RATE || total - lastSent < RATE / 4 || total - heardFrom < RATE / 2) continue
     const start = Math.max(total - WINDOW, heardFrom), n = total - start
->>>>>>> Stashed changes
     const pcm = new Int16Array(n)
     for (let i = 0; i < n; i++) pcm[i] = Math.max(-1, Math.min(1, ring[(start + i) % RING])) * 32767
     lastSent = total
@@ -214,18 +191,11 @@ async function listen() {
       // The prompt is script text read before this audio window: it helps spelling and language
       // without making Whisper skip words it thinks it already heard.
       const text = await api.invoke('transcribe', pcm.buffer, { language: script.lang, prompt: promptBefore(start) })
-<<<<<<< Updated upstream
-      const next = locate(idx, text, Math.floor(pos))
-      // heardFrom > start: moved by hand while this was transcribing, so the result is stale.
-      if (next > 0 && heardFrom <= start && settings.mode === 'voice' && playing) moveTo(next)
-      status = ''
-=======
       // More text than the audio could hold (fast speech is ~20 letters/s) is made up: ignore it.
       const next = normalize(text).length > 25 * n / RATE + 10 ? -1 : locate(idx, text, Math.floor(pos))
       // A move by hand while this was on its way: it heard the old place.
       if (next > 0 && sentAt === jumps && settings.mode === 'voice' && playing) moveTo(next)
       engineNote = OK
->>>>>>> Stashed changes
     } catch (e) {
       engineError(e)
       await sleep(2000)

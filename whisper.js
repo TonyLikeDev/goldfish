@@ -7,7 +7,7 @@ process.parentPort.on('message', async ({ data: m }) => {
   try {
     if (m.type === 'load') {
       ctx = await initWhisper({ filePath: m.model, useGpu: m.gpu }, m.variant)
-      // The first GPU run compiles shaders (up to ~20 s, once per machine): do it now, not mid-talk.
+      // The first run compiles GPU shaders (~10 s on Metal at every launch, up to ~20 s on Vulkan): do it now, not mid-talk.
       await ctx.transcribeData(new ArrayBuffer(32000), { language: 'en' }).promise
       process.parentPort.postMessage({ id: m.id })
     } else {
