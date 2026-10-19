@@ -346,6 +346,15 @@ async function startEngine() {
   }
 }
 
+// Loading takes ~10 s (Metal and Vulkan build their shaders on every launch), so start it before the first Start.
+// It unloads after 10 idle minutes, like after a session.
+function warmEngine() {
+  if (settings.mode !== 'voice' || !fs.existsSync(modelPath(settings.model))) return
+  ensureEngine().catch(console.error)
+  clearTimeout(idleTimer)
+  idleTimer = setTimeout(stopEngine, 10 * 60e3)
+}
+
 function stopEngine(reason = 'Speech engine stopped') {
   const proc = engine
   engine = engineReady = null
@@ -615,6 +624,7 @@ app.whenReady().then(() => {
   Menu.setApplicationMenu(isMac ? Menu.buildFromTemplate([{ role: 'appMenu' }, { role: 'editMenu' }, { role: 'windowMenu' }]) : null)
   for (const event of ['display-added', 'display-removed', 'display-metrics-changed']) screen.on(event, placeBar)
   createMain()
+  warmEngine()
   if (settings.remote) startRemote()
   if (app.isPackaged) checkUpdates().catch(() => {})
 })
