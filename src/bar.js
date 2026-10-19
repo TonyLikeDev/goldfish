@@ -78,9 +78,15 @@ function moveTo(p) {
   if (history.length > 500) history.shift()
 }
 
+// A move by hand: audio heard so far was read at the old place, so listen() stops sending it.
+function jumpTo(p) {
+  heardFrom = total
+  moveTo(p)
+}
+
 api.on('cmd', name => {
   if (name === 'toggle') playing = !playing
-  else if (name === 'back' || name === 'forward') moveTo(lineStart(name === 'back' ? -1 : 1))
+  else if (name === 'back' || name === 'forward') jumpTo(lineStart(name === 'back' ? -1 : 1))
   else if (name === 'faster' || name === 'slower') {
     settings.speed = Math.min(8, Math.max(0.5, settings.speed + (name === 'faster' ? 0.25 : -0.25)))
     api.invoke('settings:set', { speed: settings.speed })
@@ -92,14 +98,14 @@ let wheel = 0
 addEventListener('wheel', e => {
   wheel += e.deltaY
   if (Math.abs(wheel) < 50) return
-  moveTo(lineStart(Math.sign(wheel)))
+  jumpTo(lineStart(Math.sign(wheel)))
   wheel = 0
 }, { passive: true })
 
 // ---------- microphone and voice activity ----------
 
 const ring = new Float32Array(RING)
-let total = 0, floor = 0.003, lastVoice = -Infinity
+let total = 0, floor = 0.003, lastVoice = -Infinity, heardFrom = 0
 const speaking = () => total - lastVoice < RATE * 0.4
 
 function onChunk(c) {
@@ -155,7 +161,8 @@ async function listen() {
     await sleep(100)
     if (settings.mode !== 'voice' || !playing || pos >= spans.length) continue
     if (total - lastVoice > RATE || total - lastSent < RATE / 4) continue // only while talking, only with new audio
-    const n = Math.min(total, WINDOW), start = total - n
+    const start = Math.max(total - WINDOW, heardFrom), n = total - start
+    if (n < RATE) continue // too short to hold the few words locate() needs, e.g. just after a move
     const pcm = new Int16Array(n)
     for (let i = 0; i < n; i++) pcm[i] = Math.max(-1, Math.min(1, ring[(start + i) % RING])) * 32767
     lastSent = total
@@ -164,7 +171,8 @@ async function listen() {
       // without making Whisper skip words it thinks it already heard.
       const text = await api.invoke('transcribe', pcm.buffer, { language: script.lang, prompt: promptBefore(start) })
       const next = locate(idx, text, Math.floor(pos))
-      if (next > 0 && settings.mode === 'voice' && playing) moveTo(next)
+      // heardFrom > start: moved by hand while this was transcribing, so the result is stale.
+      if (next > 0 && heardFrom <= start && settings.mode === 'voice' && playing) moveTo(next)
       status = ''
     } catch (e) {
       status = cleanError(e)
